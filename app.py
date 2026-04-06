@@ -229,6 +229,46 @@ st.markdown("""
         border-radius: 8px !important;
         background: #fafaf8 !important;
     }
+
+    /* ── Portfolio banner ── */
+    .portfolio-banner {
+        background: #fffdf0;
+        border: 1px solid #f0e68c;
+        border-left: 4px solid #c8f55a;
+        border-radius: 8px;
+        padding: 0.75rem 1.25rem;
+        margin-bottom: 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+    }
+    .portfolio-banner-text {
+        font-size: 0.85rem;
+        color: #444;
+        line-height: 1.5;
+    }
+    .portfolio-banner-text strong {
+        color: #111;
+        font-weight: 600;
+    }
+    .portfolio-links {
+        display: flex;
+        gap: 0.6rem;
+        white-space: nowrap;
+    }
+    .portfolio-link {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.7rem;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 5px;
+        text-decoration: none;
+        border: 1px solid #d4d0c8;
+        color: #333;
+        background: #fff;
+    }
+    .portfolio-link:hover { background: #111; color: #c8f55a; border-color: #111; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -242,6 +282,22 @@ st.markdown("""
         <span class="nav-badge">AI-Powered</span>
     </div>
     <div class="nav-meta">Support Ops · Internal Tool</div>
+</div>
+""", unsafe_allow_html=True)
+
+
+# ── Portfolio banner ─────────────────────────────────────────────────────────
+st.markdown("""
+<div class="portfolio-banner">
+    <div class="portfolio-banner-text">
+        👋 <strong>Hey, hiring team!</strong> This is a portfolio project by <strong>Sef Nouri</strong> —
+        a working AI app that simulates how SaaS support teams could automate nonprofit discount request triage
+        using document verification and LLM-based eligibility classification. Feel free to test it with a real request.
+    </div>
+    <div class="portfolio-links">
+        <a class="portfolio-link" href="https://github.com/sefket24/nonprofit-discount-assistant" target="_blank">⌥ GitHub</a>
+        <a class="portfolio-link" href="https://www.linkedin.com/in/sefketnouri" target="_blank">in LinkedIn</a>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
