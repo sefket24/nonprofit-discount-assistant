@@ -1,133 +1,171 @@
-# Nonprofit Discount Assistant
+# 🤝 AI Nonprofit Discount Assistant
 
-**A browser-based AI support tool for evaluating nonprofit discount requests — inspired by real SaaS support workflows.**
-
-🔗 **[Live Demo](https://your-username.github.io/nonprofit-discount-assistant)**
-> Replace `your-username` with your actual GitHub username after deployment.
+> AI-powered eligibility screening for SaaS support teams — built with Python, Streamlit, and OpenAI.
 
 ---
 
 ## Overview
 
-This project simulates an internal support tool used by SaaS teams to handle incoming nonprofit discount requests. Instead of manual review for every ticket, the assistant uses AI to classify requests, detect tone, and draft an empathetic response — all in real time.
-
-Built as a single-page app that runs entirely in the browser. No backend required.
+The **AI Nonprofit Discount Assistant** is a minimal MVP web app that simulates a SaaS support workflow for processing nonprofit discount requests. It uses a large language model to evaluate applicant messages, classify eligibility, and draft a suggested support response — all in real time.
 
 ---
 
 ## Problem
 
-Support teams at SaaS companies receive high volumes of repetitive discount requests — many from nonprofits seeking reduced pricing. Each one requires:
+Support teams at SaaS companies frequently receive nonprofit discount requests through their help portals. These requests vary wildly in quality, completeness, and legitimacy. Manually reviewing each one is:
 
-- Verifying eligibility criteria
-- Assessing the tone and urgency of the request
-- Drafting a thoughtful, on-brand response
-
-This process is slow, inconsistent, and hard to scale. A support rep reviewing 40 tickets a day will inevitably apply different standards to similar requests.
+- Time-consuming for support agents
+- Inconsistent across team members
+- Hard to scale as request volume grows
 
 ---
 
 ## Solution
 
-This tool provides a lightweight AI layer that:
+This tool provides an AI-powered first-pass review. An agent fills out the request form (or pastes an incoming ticket), and the assistant instantly returns:
 
-1. Accepts a support request via a structured input form
-2. Sends the request to Claude (Anthropic's AI) with a structured prompt
-3. Returns a JSON evaluation with classification, reasoning, tone, confidence score, and a suggested reply
-4. Displays everything in a clean, internal-tool-style UI
+- A **classification** (Eligible / Needs Review / Not Eligible)
+- A **reasoning summary**
+- A **tone analysis** of the request
+- A **suggested reply** ready to copy and send
+- **Tags** for categorization and tracking
 
-The result is a consistent first pass on every request — support reps can accept, edit, or override the suggestion, but they're never starting from a blank page.
+This frees support agents to focus on edge cases, exceptions, and relationship-building — not repetitive triage.
 
 ---
 
 ## How It Works
 
-```
-User fills out form
-        ↓
-Request is sent to Anthropic API (claude-sonnet)
-        ↓
-AI returns structured JSON:
-  - classification: eligible / needs_more_info / not_eligible
-  - reasoning: 1–2 sentence explanation
-  - tone: frustrated / neutral / polite
-  - confidence: 0–100 score
-  - suggested_response: draft reply for the support rep
-  - tags: e.g. ["billing", "nonprofit", "discount"]
-        ↓
-UI renders result with status badge, confidence bar, and copyable response
-```
+1. The support agent (or applicant) fills in the request form:
+   - Organization name
+   - Contact email
+   - Free-text description of their mission and discount request
+   - Checkbox confirming proof of nonprofit status
 
-The prompt is designed to mimic how a senior support rep would evaluate requests: accounting for proof of status, message tone, and likely intent.
+2. On submission, a structured prompt is sent to the OpenAI API (`gpt-4o-mini`).
+
+3. The model returns a JSON object with classification, reasoning, tone, suggested response, and tags.
+
+4. Results are displayed in a clean side-by-side layout with color-coded status badges.
 
 ---
 
 ## Example Input / Output
 
 **Input:**
-
-| Field | Value |
-|---|---|
-| Organization | Riverside Youth Literacy Program |
-| Email | director@riversidelivs.org |
-| Message | "Hi, we're a small 501(c)(3) serving underserved kids in our area. We'd love to use your platform but the standard pricing is out of reach for us. Do you offer nonprofit discounts?" |
-| Proof available | ✅ Yes |
+- Org: `Bright Futures Youth Mentorship`
+- Email: `grants@brightfutures.org`
+- Message: *"We are a registered 501(c)(3) supporting underserved youth in rural areas. We'd love to explore your platform for case management — a discount would help us stretch our grant funding."*
+- Proof provided: ✅ Yes
 
 **Output:**
-
 ```json
 {
   "classification": "eligible",
-  "reasoning": "The organization identifies as a registered 501(c)(3) and has indicated proof is available. The request is clearly mission-driven and fits standard nonprofit discount criteria.",
-  "tone": "polite",
-  "confidence": 91,
-  "suggested_response": "Thank you for reaching out — we love supporting organizations doing this kind of work. Since you have your 501(c)(3) documentation ready, please reply with it attached and we'll get your nonprofit discount applied within 1–2 business days.",
-  "tags": ["nonprofit", "discount", "billing", "eligible"]
+  "reasoning": "The organization is a registered 501(c)(3) with a clear charitable mission serving underserved youth. Proof of status was provided and the use case is mission-aligned.",
+  "tone": "Professional and mission-driven",
+  "suggested_response": "Thank you for reaching out, Bright Futures Youth Mentorship! We're delighted to support your work with underserved youth. Based on your 501(c)(3) status, you qualify for our nonprofit discount. Please reply to this ticket with your EIN and a team member will apply the discount within 1 business day.",
+  "tags": ["verified-nonprofit", "youth-services", "501c3", "eligible"]
 }
 ```
 
 ---
 
-## Tech Stack
+## Setup Instructions
 
-| Layer | Technology |
-|---|---|
-| Frontend | Vanilla HTML, CSS, JavaScript |
-| AI | Anthropic Claude API (`claude-sonnet-4`) |
-| Fonts | Sora + IBM Plex Mono (Google Fonts) |
-| Hosting | GitHub Pages |
+### 1. Clone the repository
 
-No frameworks, no build step, no backend. The entire app is a single `index.html` file that calls the Anthropic API directly from the browser.
+```bash
+git clone https://github.com/YOUR_USERNAME/nonprofit-discount-assistant.git
+cd nonprofit-discount-assistant
+```
+
+### 2. Create and activate a virtual environment (recommended)
+
+```bash
+python -m venv venv
+source venv/bin/activate        # Mac/Linux
+venv\Scripts\activate           # Windows
+```
+
+### 3. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Add your OpenAI API key
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and replace the placeholder with your real key:
+
+```
+OPENAI_API_KEY=sk-...your-key-here...
+```
 
 ---
 
-## Running Locally
+## Run Locally
 
-1. Clone the repo:
-   ```bash
-   git clone https://github.com/your-username/nonprofit-discount-assistant.git
-   cd nonprofit-discount-assistant
-   ```
+```bash
+streamlit run app.py
+```
 
-2. Open `index.html` in your browser — no install needed.
+The app will open at `http://localhost:8501`.
 
-3. Enter your [Anthropic API key](https://console.anthropic.com) in the form to activate the AI.
+---
 
-> Your API key is used only in your browser session and is never stored or transmitted anywhere except directly to Anthropic's API.
+## Push to GitHub
+
+```bash
+git init
+git add .
+git commit -m "Initial commit - AI Nonprofit Discount Assistant"
+git branch -M main
+git remote add origin https://github.com/YOUR_USERNAME/nonprofit-discount-assistant.git
+git push -u origin main
+```
+
+> **Note:** When prompted for a password, use your GitHub Personal Access Token — not your account password.
+
+---
+
+## Deploy on Streamlit Cloud
+
+1. Push your repo to GitHub (see above)
+2. Go to [streamlit.io/cloud](https://streamlit.io/cloud)
+3. Click **New app** → connect your GitHub account
+4. Select your repo and set `app.py` as the main file
+5. Under **Advanced settings → Secrets**, add:
+
+```
+OPENAI_API_KEY = "sk-...your-key-here..."
+```
+
+6. Click **Deploy** — your app will be live in seconds
+
+---
+
+## Tech Stack
+
+| Layer | Tool |
+|-------|------|
+| UI | Streamlit |
+| AI | OpenAI GPT-4o-mini |
+| Config | python-dotenv |
+| Language | Python 3.10+ |
 
 ---
 
 ## Inspiration
 
-This project is inspired by real workflows I encountered working with SaaS support teams — specifically around the challenge of handling high-volume, structured requests like nonprofit discount applications consistently and empathetically at scale.
-
-The goal was to explore how a lightweight AI layer could assist (not replace) support reps by providing a reliable first pass on incoming requests.
+This project was inspired by real-world SaaS support workflows — specifically the challenge of processing high volumes of nonprofit discount requests consistently and efficiently. It demonstrates how a focused AI integration can meaningfully reduce manual review time while improving response quality.
 
 ---
 
-## Future Ideas
+## License
 
-- Save and export evaluation history
-- Confidence threshold routing (auto-approve above 85%, escalate below 50%)
-- Integration with Zendesk or Intercom via webhook
-- Team-level analytics dashboard
+MIT — free to use, modify, and build on.
