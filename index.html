@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nonprofit Discount Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Sora:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #ffffff;
+      --bg-secondary: #f7f7f5;
+      --bg-tertiary: #f0efeb;
+      --text-primary: #1a1a18;
+      --text-secondary: #5f5e5a;
+      --text-tertiary: #888780;
+      --border: rgba(0,0,0,0.1);
+      --border-md: rgba(0,0,0,0.18);
+      --radius-md: 8px;
+      --radius-lg: 12px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1c1c1a;
+        --bg-secondary: #242422;
+        --bg-tertiary: #2c2c2a;
+        --text-primary: #f0efeb;
+        --text-secondary: #b4b2a9;
+        --text-tertiary: #888780;
+        --border: rgba(255,255,255,0.1);
+        --border-md: rgba(255,255,255,0.18);
+      }
+    }
+
+    body {
+      font-family: 'Sora', system-ui, sans-serif;
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 2rem;
+      padding-bottom: 1.25rem;
+      border-bottom: 0.5px solid var(--border);
+    }
+
+    .header-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #1D9E75;
+      box-shadow: 0 0 0 3px rgba(29,158,117,0.2);
+      flex-shrink: 0;
+    }
+
+    header h1 {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text-primary);
+      letter-spacing: 0.01em;
+    }
+
+    .header-badge {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--bg-secondary);
+      color: var(--text-tertiary);
+      border: 0.5px solid var(--border);
+      margin-left: auto;
+      white-space: nowrap;
+    }
+
+    .columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 640px) {
+      .columns { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: var(--bg);
+      border-radius: var(--radius-lg);
+      border: 0.5px solid var(--border);
+      padding: 1.5rem;
+    }
+
+    .section-label {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      margin-bottom: 1.25rem;
+    }
+
+    .field { margin-bottom: 1rem; }
+
+    .field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+
+    .field input, .field textarea {
+      width: 100%;
+      font-family: 'Sora', system-ui, sans-serif;
+      font-size: 13px;
+      padding: 8px 10px;
+      background: var(--bg-secondary);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .field input:focus, .field textarea:focus {
+      border-color: var(--border-md);
+    }
+
+    .field textarea {
+      resize: vertical;
+      min-height: 90px;
+      line-height: 1.5;
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 10px 12px;
+      background: var(--bg-secondary);
+      border-radius: var(--radius-md);
+      border: 0.5px solid var(--border);
+      margin-bottom: 1.25rem;
+      cursor: pointer;
+    }
+
+    .checkbox-row input { margin-top: 1px; accent-color: #1D9E75; }
+
+    .checkbox-row span {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 10px;
+      font-family: 'Sora', system-ui, sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border-radius: var(--radius-md);
+      border: 0.5px solid var(--border-md);
+      background: var(--bg);
+      color: var(--text-primary);
+      transition: all 0.15s;
+    }
+
+    .submit-btn:hover { background: var(--bg-secondary); }
+    .submit-btn:active { transform: scale(0.99); }
+    .submit-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+    .result-panel {
+      background: var(--bg-secondary);
+      border-radius: var(--radius-lg);
+      border: 0.5px solid var(--border);
+      padding: 1.5rem;
+      min-height: 320px;
+    }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 260px;
+      gap: 8px;
+      color: var(--text-tertiary);
+      font-size: 12px;
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    .empty-icon {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      border: 0.5px dashed var(--border-md);
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 4px;
+      color: var(--text-tertiary);
+    }
+
+    .loading-pulse {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      justify-content: center;
+      height: 260px;
+    }
+
+    .pulse-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--text-tertiary);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+
+    .pulse-dot:nth-child(2) { animation-delay: 0.15s; }
+    .pulse-dot:nth-child(3) { animation-delay: 0.3s; }
+
+    @keyframes pulse {
+      0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+      40% { opacity: 1; transform: scale(1); }
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 5px 12px;
+      border-radius: var(--radius-md);
+      margin-bottom: 1.25rem;
+    }
+
+    .status-eligible   { background: #E1F5EE; color: #085041; border: 0.5px solid #5DCAA5; }
+    .status-review     { background: #FAEEDA; color: #633806; border: 0.5px solid #EF9F27; }
+    .status-ineligible { background: #FCEBEB; color: #501313; border: 0.5px solid #F09595; }
+
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .dot-eligible   { background: #0F6E56; }
+    .dot-review     { background: #854F0B; }
+    .dot-ineligible { background: #A32D2D; }
+
+    .result-row { margin-bottom: 1rem; }
+
+    .result-key {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      margin-bottom: 5px;
+    }
+
+    .result-val {
+      font-size: 12px;
+      color: var(--text-primary);
+      line-height: 1.6;
+    }
+
+    .response-box {
+      background: var(--bg);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      font-size: 12px;
+      line-height: 1.7;
+      color: var(--text-primary);
+    }
+
+    .tags-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .tag {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: var(--bg);
+      border: 0.5px solid var(--border-md);
+      color: var(--text-secondary);
+    }
+
+    .confidence-bar {
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 5px;
+    }
+
+    .confidence-fill {
+      height: 100%;
+      border-radius: 2px;
+      background: #1D9E75;
+      transition: width 0.9s ease;
+    }
+
+    hr.divider {
+      border: none;
+      border-top: 0.5px solid var(--border);
+      margin: 1rem 0;
+    }
+
+    .regen-btn {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      padding: 7px 14px;
+      cursor: pointer;
+      border-radius: var(--radius-md);
+      border: 0.5px solid var(--border-md);
+      background: transparent;
+      color: var(--text-secondary);
+      transition: all 0.15s;
+      width: 100%;
+      margin-top: 0.5rem;
+    }
+
+    .regen-btn:hover { background: var(--bg); color: var(--text-primary); }
+
+    .api-warning {
+      background: #FAEEDA;
+      border: 0.5px solid #EF9F27;
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      font-size: 12px;
+      color: #633806;
+      line-height: 1.6;
+      margin-bottom: 1rem;
+    }
+
+    .api-warning a { color: #854F0B; }
+
+    #apiKeySection {
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="header-dot"></div>
+      <h1>Nonprofit Discount Assistant</h1>
+      <span class="header-badge">INTERNAL TOOL · v1.0</span>
+    </header>
+
+    <div class="columns">
+      <!-- LEFT: Form -->
+      <div>
+        <p class="section-label">Request input</p>
+
+        <div id="apiKeySection">
+          <div class="field">
+            <label>Anthropic API key</label>
+            <input type="password" id="apiKey" placeholder="sk-ant-..." />
+          </div>
+          <div class="api-warning">
+            Your key is used only in your browser and never stored or sent anywhere except directly to Anthropic's API.
+            Get one at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>.
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Organization name</label>
+          <input type="text" id="orgName" placeholder="e.g. Open Future Foundation" />
+        </div>
+
+        <div class="field">
+          <label>Contact email</label>
+          <input type="text" id="email" placeholder="contact@org.org" />
+        </div>
+
+        <div class="field">
+          <label>Request message</label>
+          <textarea id="message" placeholder="Describe the discount request and any relevant context…"></textarea>
+        </div>
+
+        <label class="checkbox-row">
+          <input type="checkbox" id="hasProof" />
+          <span>Proof of nonprofit status available (501(c)(3) or equivalent)</span>
+        </label>
+
+        <button class="submit-btn" id="submitBtn" onclick="runEval()">Evaluate request</button>
+      </div>
+
+      <!-- RIGHT: Results -->
+      <div>
+        <p class="section-label">AI evaluation</p>
+        <div class="result-panel">
+          <div class="empty-state" id="emptyState">
+            <div class="empty-icon">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1"/>
+                <path d="M5 7h6M5 10h4" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <span>Submit a request to see<br>AI evaluation results</span>
+          </div>
+          <div id="loadingState" style="display:none">
+            <div class="loading-pulse">
+              <div class="pulse-dot"></div>
+              <div class="pulse-dot"></div>
+              <div class="pulse-dot"></div>
+            </div>
+          </div>
+          <div id="resultContent" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let lastPayload = null;
+
+    async function runEval(regen) {
+      const apiKey = document.getElementById('apiKey').value.trim();
+      const org    = document.getElementById('orgName').value.trim();
+      const email  = document.getElementById('email').value.trim();
+      const msg    = document.getElementById('message').value.trim();
+      const proof  = document.getElementById('hasProof').checked;
+
+      if (!apiKey) { alert('Please enter your Anthropic API key.'); return; }
+      if (!org || !msg) { alert('Please fill in the organization name and request message.'); return; }
+
+      if (!regen) lastPayload = { apiKey, org, email, msg, proof };
+
+      document.getElementById('emptyState').style.display = 'none';
+      document.getElementById('loadingState').style.display = 'flex';
+      document.getElementById('resultContent').style.display = 'none';
+      document.getElementById('submitBtn').disabled = true;
+
+      const prompt = `You are a support agent assistant at a SaaS company. Analyze the following nonprofit discount request and return ONLY valid JSON — no markdown, no backticks, no preamble.
+
+Organization: ${lastPayload.org}
+Email: ${lastPayload.email || 'not provided'}
+Proof of nonprofit status: ${lastPayload.proof ? 'Yes — available' : 'No — not provided'}
+Request message: ${lastPayload.msg}
+
+Return exactly this JSON structure:
+{
+  "classification": "eligible" | "needs_more_info" | "not_eligible",
+  "reasoning": "1-2 sentence explanation",
+  "tone": "frustrated" | "neutral" | "polite",
+  "confidence": <integer 0-100>,
+  "suggested_response": "2-3 sentence empathetic reply with clear next steps for the customer",
+  "tags": ["tag1", "tag2", "tag3"]
+}
+
+Be realistic and concise. This is for a real SaaS support team.`;
+
+      try {
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': lastPayload.apiKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true'
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 1000,
+            messages: [{ role: 'user', content: prompt }]
+          })
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error?.message || 'API error');
+        }
+
+        const data = await res.json();
+        const raw  = data.content?.map(b => b.text || '').join('');
+        const result = JSON.parse(raw.replace(/```json|```/g, '').trim());
+        renderResult(result);
+      } catch (e) {
+        document.getElementById('loadingState').style.display = 'none';
+        document.getElementById('resultContent').innerHTML = `<p style="font-size:12px;color:#A32D2D;line-height:1.6">Error: ${e.message}<br><br>Check that your API key is correct and has available credits.</p>`;
+        document.getElementById('resultContent').style.display = 'block';
+      }
+
+      document.getElementById('submitBtn').disabled = false;
+    }
+
+    function renderResult(r) {
+      const map = {
+        eligible:        { cls: 'status-eligible',   dot: 'dot-eligible',   label: 'Eligible' },
+        needs_more_info: { cls: 'status-review',     dot: 'dot-review',     label: 'Needs review' },
+        not_eligible:    { cls: 'status-ineligible', dot: 'dot-ineligible', label: 'Not eligible' }
+      };
+
+      const s    = map[r.classification] || map['needs_more_info'];
+      const conf = Math.round(r.confidence || 70);
+      const tags = (r.tags || []).map(t => `<span class="tag">${t}</span>`).join('');
+
+      document.getElementById('resultContent').innerHTML = `
+        <span class="status-badge ${s.cls}">
+          <span class="status-dot ${s.dot}"></span>
+          ${s.label}
+        </span>
+
+        <div class="result-row">
+          <div class="result-key">Reasoning</div>
+          <div class="result-val">${r.reasoning}</div>
+        </div>
+
+        <div class="result-row">
+          <div class="result-key">Tone detected</div>
+          <div class="result-val" style="text-transform:capitalize">${r.tone}</div>
+        </div>
+
+        <div class="result-row">
+          <div class="result-key">Confidence · ${conf}%</div>
+          <div class="confidence-bar">
+            <div class="confidence-fill" style="width:0%" id="confFill"></div>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="result-row">
+          <div class="result-key">Suggested response</div>
+          <div class="response-box">${r.suggested_response}</div>
+        </div>
+
+        <div class="result-row">
+          <div class="result-key">Tags</div>
+          <div class="tags-row">${tags}</div>
+        </div>
+
+        <button class="regen-btn" onclick="runEval(true)">Regenerate response</button>
+      `;
+
+      document.getElementById('loadingState').style.display = 'none';
+      document.getElementById('resultContent').style.display = 'block';
+      setTimeout(() => {
+        const fill = document.getElementById('confFill');
+        if (fill) fill.style.width = conf + '%';
+      }, 50);
+    }
+  </script>
+</body>
+</html>
