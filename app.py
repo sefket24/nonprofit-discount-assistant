@@ -1,619 +1,607 @@
 import streamlit as st
 import json
 import os
+import base64
 import time
-from anthropic import Anthropic
+from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
 
+# ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Support Reply Copilot",
-    page_icon="⚡",
+    page_title="Nonprofit Discount Assistant",
+    page_icon="🤝",
     layout="wide",
 )
 
-# ── Session state ─────────────────────────────────────────────────────────────
-if "total_analyzed" not in st.session_state:
-    st.session_state.total_analyzed = 0
-if "deflected_count" not in st.session_state:
-    st.session_state.deflected_count = 0
-if "last_elapsed" not in st.session_state:
-    st.session_state.last_elapsed = None
+# ── Session state for stats ───────────────────────────────────────────────────
+if "total_requests" not in st.session_state:
+    st.session_state.total_requests = 0
+if "eligible_count" not in st.session_state:
+    st.session_state.eligible_count = 0
+if "last_process_time" not in st.session_state:
+    st.session_state.last_process_time = None
 
-# ── CSS ───────────────────────────────────────────────────────────────────────
+# ── Custom CSS ────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
 
-html, body, [class*="css"] {
-    font-family: 'DM Sans', sans-serif;
-}
-.stApp { background: #0f0f0e; }
-h1,h2,h3,h4 { font-family: 'DM Mono', monospace; }
+    html, body, [class*="css"] { font-family: 'IBM Plex Sans', sans-serif; }
+    .stApp { background-color: #f4f3ef; }
+    h1, h2, h3 { font-family: 'IBM Plex Mono', monospace; }
 
-.block-container {
-    padding-top: 1.75rem;
-    padding-bottom: 2rem;
-    max-width: 1200px;
-}
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+        max-width: 1140px;
+    }
 
-/* ── Top bar ── */
-.topbar {
-    background: #181817;
-    border: 1px solid #2a2a28;
-    border-radius: 10px;
-    padding: 0.9rem 1.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 1.25rem;
-}
-.topbar-left {
-    display: flex; align-items: center; gap: 10px;
-}
-.topbar-indicator {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: #4ade80;
-    box-shadow: 0 0 0 3px rgba(74,222,128,0.15);
-}
-.topbar-title {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.95rem; font-weight: 500;
-    color: #e8e6e1;
-    margin: 0;
-}
-.topbar-tag {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.6rem; font-weight: 500;
-    background: #1f2d1f; color: #4ade80;
-    border: 1px solid #2d4a2d;
-    padding: 2px 8px; border-radius: 3px;
-    letter-spacing: 1.5px; text-transform: uppercase;
-}
-.topbar-right {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.65rem; color: #555;
-}
+    /* ── Top nav bar ── */
+    .nav-bar {
+        background: #111;
+        border-radius: 12px;
+        padding: 1rem 1.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1.25rem;
+    }
+    .nav-brand {
+        display: flex; align-items: center; gap: 0.75rem;
+    }
+    .nav-brand h1 {
+        color: #f4f3ef; margin: 0;
+        font-size: 1.1rem; font-weight: 600;
+        font-family: 'IBM Plex Mono', monospace;
+    }
+    .nav-badge {
+        background: #c8f55a; color: #111;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.6rem; font-weight: 700;
+        padding: 2px 7px; border-radius: 3px;
+        letter-spacing: 1.5px; text-transform: uppercase;
+    }
+    .nav-meta {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.7rem; color: #666;
+    }
 
-/* ── Stats ── */
-.stats-row {
-    display: flex; gap: 0.75rem; margin-bottom: 1.25rem;
-}
-.stat-card {
-    flex: 1;
-    background: #181817;
-    border: 1px solid #2a2a28;
-    border-radius: 8px;
-    padding: 0.9rem 1.1rem;
-}
-.stat-label {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.6rem; font-weight: 500;
-    color: #555; text-transform: uppercase;
-    letter-spacing: 1.2px; margin-bottom: 0.3rem;
-}
-.stat-value {
-    font-family: 'DM Mono', monospace;
-    font-size: 1.5rem; font-weight: 500; color: #e8e6e1;
-    line-height: 1;
-}
-.stat-sub {
-    font-size: 0.7rem; color: #444; margin-top: 0.2rem;
-}
+    /* ── Stat cards ── */
+    .stats-row {
+        display: flex; gap: 1rem; margin-bottom: 1.25rem;
+    }
+    .stat-card {
+        flex: 1;
+        background: #fff;
+        border: 1px solid #e0ddd6;
+        border-radius: 10px;
+        padding: 1rem 1.25rem;
+    }
+    .stat-label {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.65rem; font-weight: 600;
+        color: #999; text-transform: uppercase;
+        letter-spacing: 1px; margin-bottom: 0.3rem;
+    }
+    .stat-value {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 1.6rem; font-weight: 600; color: #111;
+        line-height: 1;
+    }
+    .stat-sub {
+        font-size: 0.75rem; color: #aaa; margin-top: 0.2rem;
+    }
 
-/* ── Panels ── */
-.panel {
-    background: #181817;
-    border: 1px solid #2a2a28;
-    border-radius: 10px;
-    padding: 1.4rem;
-}
-.panel-header {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.65rem; font-weight: 500;
-    color: #555; text-transform: uppercase;
-    letter-spacing: 1.2px; margin-bottom: 1rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid #222;
-}
+    /* ── Cards ── */
+    .form-card {
+        background: #fff;
+        border: 1px solid #e0ddd6;
+        border-radius: 12px;
+        padding: 1.6rem;
+    }
+    .result-card {
+        background: #fff;
+        border: 1px solid #e0ddd6;
+        border-radius: 12px;
+        padding: 1.6rem;
+    }
 
-/* ── Streamlit form elements ── */
-.stTextArea > div > div > textarea {
-    background: #111110 !important;
-    border: 1px solid #2a2a28 !important;
-    border-radius: 8px !important;
-    color: #d4d2cc !important;
-    font-family: 'DM Sans', sans-serif !important;
-    font-size: 0.9rem !important;
-    resize: vertical !important;
-}
-.stSelectbox > div > div {
-    background: #111110 !important;
-    border: 1px solid #2a2a28 !important;
-    border-radius: 8px !important;
-    color: #d4d2cc !important;
-}
-.stSelectbox label, .stTextArea label {
-    color: #777 !important;
-    font-size: 0.78rem !important;
-    font-family: 'DM Mono', monospace !important;
-    font-weight: 500 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 1px !important;
-}
+    /* ── Progress steps ── */
+    .step-row {
+        display: flex; gap: 0.5rem;
+        margin-bottom: 1.25rem;
+    }
+    .step {
+        flex: 1; padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.72rem; font-weight: 600;
+        text-align: center;
+    }
+    .step-pending { background: #f4f3ef; color: #bbb; border: 1px solid #e0ddd6; }
+    .step-active  { background: #111; color: #c8f55a; border: 1px solid #111; }
+    .step-done    { background: #d4f7d4; color: #1a6b1a; border: 1px solid #a8e6a8; }
+    .step-error   { background: #fde8e8; color: #8b1a1a; border: 1px solid #f0a8a8; }
 
-/* ── Button ── */
-.stButton > button {
-    background: #e8e6e1 !important;
-    color: #0f0f0e !important;
-    border: none !important;
-    border-radius: 7px !important;
-    font-family: 'DM Mono', monospace !important;
-    font-size: 0.82rem !important;
-    font-weight: 500 !important;
-    padding: 0.6rem 1.5rem !important;
-    width: 100% !important;
-    letter-spacing: 0.5px !important;
-    transition: all 0.15s !important;
-}
-.stButton > button:hover {
-    background: #fff !important;
-}
+    /* ── Doc result ── */
+    .doc-verified   { background:#d4f7d4; border:1px solid #a8e6a8; border-radius:8px; padding:0.6rem 1rem; font-size:0.82rem; color:#1a6b1a; font-family:'IBM Plex Mono',monospace; margin-bottom:1rem; }
+    .doc-unverified { background:#fff7d4; border:1px solid #f0d890; border-radius:8px; padding:0.6rem 1rem; font-size:0.82rem; color:#7a5c00; font-family:'IBM Plex Mono',monospace; margin-bottom:1rem; }
 
-/* ── Result sections ── */
-.section-label {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.6rem; font-weight: 500; color: #555;
-    text-transform: uppercase; letter-spacing: 1.2px;
-    margin-bottom: 0.4rem; margin-top: 1.1rem;
-}
+    /* ── Status badges ── */
+    .status-eligible    { display:inline-block; background:#d4f7d4; color:#1a6b1a; font-family:'IBM Plex Mono',monospace; font-size:0.8rem; font-weight:600; padding:6px 14px; border-radius:6px; border:1px solid #a8e6a8; }
+    .status-needs-review{ display:inline-block; background:#fff7d4; color:#7a5c00; font-family:'IBM Plex Mono',monospace; font-size:0.8rem; font-weight:600; padding:6px 14px; border-radius:6px; border:1px solid #f0d890; }
+    .status-not-eligible{ display:inline-block; background:#fde8e8; color:#8b1a1a; font-family:'IBM Plex Mono',monospace; font-size:0.8rem; font-weight:600; padding:6px 14px; border-radius:6px; border:1px solid #f0a8a8; }
 
-/* ── Badges ── */
-.badge {
-    display: inline-flex; align-items: center; gap: 6px;
-    font-family: 'DM Mono', monospace;
-    font-size: 0.72rem; font-weight: 500;
-    padding: 5px 12px; border-radius: 5px;
-}
-.badge-green  { background: #1a2e1a; color: #4ade80; border: 1px solid #2d4a2d; }
-.badge-yellow { background: #2a2415; color: #fbbf24; border: 1px solid #4a3c1a; }
-.badge-red    { background: #2a1515; color: #f87171; border: 1px solid #4a2020; }
-.badge-blue   { background: #15202a; color: #60a5fa; border: 1px solid #1a3a5a; }
-.badge-gray   { background: #202020; color: #888; border: 1px solid #333; }
+    /* ── Confidence bar ── */
+    .confidence-wrap { margin: 0.75rem 0 1rem; }
+    .confidence-label {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.68rem; color: #888;
+        text-transform: uppercase; letter-spacing: 1px;
+        margin-bottom: 0.3rem;
+    }
+    .confidence-track {
+        background: #f0efe9; border-radius: 99px;
+        height: 8px; width: 100%; overflow: hidden;
+    }
+    .confidence-fill {
+        height: 100%; border-radius: 99px;
+        transition: width 0.4s ease;
+    }
+    .conf-high   { background: #4caf50; }
+    .conf-medium { background: #ff9800; }
+    .conf-low    { background: #f44336; }
+    .confidence-pct {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.75rem; color: #555;
+        margin-top: 0.25rem;
+    }
 
-/* ── Deflection box ── */
-.deflection-box {
-    border-radius: 8px;
-    padding: 0.9rem 1.1rem;
-    font-size: 0.85rem;
-    line-height: 1.65;
-    margin: 0;
-}
-.deflect    { background: #1a2e1a; border: 1px solid #2d4a2d; color: #86efac; }
-.human      { background: #2a1515; border: 1px solid #4a2020; color: #fca5a5; }
+    /* ── Risk flags ── */
+    .risk-flag {
+        display: inline-block;
+        background: #fff3e0; color: #e65100;
+        border: 1px solid #ffcc80;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.7rem; padding: 3px 9px;
+        border-radius: 4px; margin: 2px 3px 2px 0;
+    }
 
-/* ── Reply box ── */
-.reply-box {
-    background: #111110;
-    border: 1px solid #2a2a28;
-    border-left: 3px solid #4ade80;
-    border-radius: 0 8px 8px 0;
-    padding: 1.1rem 1.3rem;
-    font-size: 0.87rem;
-    line-height: 1.8;
-    color: #c8c6c0;
-    white-space: pre-wrap;
-}
+    /* ── Section label ── */
+    .section-label {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.68rem; font-weight: 600; color: #999;
+        text-transform: uppercase; letter-spacing: 1px;
+        margin-bottom: 0.3rem; margin-top: 1rem;
+    }
 
-/* ── Confidence bar ── */
-.conf-track {
-    background: #222;
-    border-radius: 99px;
-    height: 4px;
-    width: 100%;
-    overflow: hidden;
-    margin-top: 5px;
-}
-.conf-fill { height: 100%; border-radius: 99px; }
-.conf-high   { background: #4ade80; }
-.conf-medium { background: #fbbf24; }
-.conf-low    { background: #f87171; }
-.conf-pct {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.7rem; color: #555; margin-top: 4px;
-}
+    /* ── Response box ── */
+    .response-box {
+        background: #f4f3ef;
+        border-left: 4px solid #111;
+        border-radius: 0 8px 8px 0;
+        padding: 1.1rem 1.4rem;
+        font-size: 0.88rem; line-height: 1.75;
+        color: #333; white-space: pre-wrap;
+    }
 
-/* ── Flags ── */
-.flag-item {
-    display: inline-flex; align-items: center; gap: 5px;
-    font-family: 'DM Mono', monospace;
-    font-size: 0.68rem;
-    background: #2a1a15; color: #fb923c;
-    border: 1px solid #4a2a18;
-    padding: 3px 9px; border-radius: 4px;
-    margin: 2px 3px 2px 0;
-}
+    /* ── Tags ── */
+    .tag { display:inline-block; background:#111; color:#f4f3ef; font-family:'IBM Plex Mono',monospace; font-size:0.68rem; padding:3px 9px; border-radius:4px; margin:2px 3px 2px 0; }
 
-/* ── Tags ── */
-.tag-item {
-    display: inline-block;
-    font-family: 'DM Mono', monospace;
-    font-size: 0.65rem;
-    background: #1e1e1c; color: #666;
-    border: 1px solid #2a2a28;
-    padding: 2px 8px; border-radius: 3px;
-    margin: 2px 2px 2px 0;
-}
+    /* ── Process time ── */
+    .process-time {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.68rem; color: #bbb;
+        text-align: right; margin-top: 1rem;
+    }
 
-/* ── Placeholder ── */
-.placeholder {
-    background: #141413;
-    border: 1px dashed #242422;
-    border-radius: 8px;
-    padding: 3.5rem 2rem;
-    text-align: center;
-    color: #333;
-    font-family: 'DM Mono', monospace;
-    font-size: 0.78rem;
-    line-height: 1.8;
-}
+    /* ── Placeholder ── */
+    .result-placeholder {
+        background: #f4f3ef; border: 2px dashed #d4d0c8;
+        border-radius: 8px; padding: 3rem 2rem;
+        text-align: center; color: #bbb;
+        font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem;
+    }
 
-/* ── Elapsed ── */
-.elapsed {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.62rem; color: #444;
-    text-align: right; margin-top: 1rem;
-}
+    /* ── Streamlit overrides ── */
+    .stButton > button {
+        background: #111; color: #f4f3ef;
+        border: none; border-radius: 8px;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.85rem; font-weight: 600;
+        padding: 0.6rem 1.5rem; width: 100%;
+        letter-spacing: 0.5px; transition: all 0.15s;
+    }
+    .stButton > button:hover { background: #333; color: #c8f55a; }
 
-/* ── Complexity dots ── */
-.complexity-row {
-    display: flex; gap: 4px; margin-top: 4px;
-}
-.c-dot {
-    width: 10px; height: 10px; border-radius: 2px;
-}
-.c-dot-on-simple  { background: #4ade80; }
-.c-dot-on-mod     { background: #fbbf24; }
-.c-dot-on-complex { background: #f87171; }
-.c-dot-off        { background: #222; }
+    .stTextInput > div > div > input,
+    .stTextArea > div > div > textarea {
+        border-radius: 8px; border: 1px solid #d4d0c8;
+        font-family: 'IBM Plex Sans', sans-serif;
+        font-size: 0.9rem; background: #fafaf8;
+    }
+    .stCheckbox > label { font-size: 0.88rem; color: #444; }
 
-/* ── Divider ── */
-.divider {
-    border: none; border-top: 1px solid #222;
-    margin: 1rem 0;
-}
+    div[data-testid="stFileUploader"] {
+        border: 2px dashed #d4d0c8 !important;
+        border-radius: 8px !important;
+        background: #fafaf8 !important;
+    }
 
-/* ── Portfolio banner ── */
-.portfolio-banner {
-    background: #131a13;
-    border: 1px solid #2d4a2d;
-    border-left: 3px solid #4ade80;
-    border-radius: 8px;
-    padding: 0.8rem 1.25rem;
-    margin-bottom: 1.25rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-}
-.portfolio-banner-text {
-    font-size: 0.83rem;
-    color: #888;
-    line-height: 1.55;
-}
-.portfolio-banner-text strong { color: #c8c6c0; font-weight: 600; }
-.portfolio-links { display: flex; gap: 0.5rem; white-space: nowrap; }
-.portfolio-link {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.68rem; font-weight: 500;
-    padding: 4px 10px; border-radius: 5px;
-    text-decoration: none;
-    border: 1px solid #2a2a28;
-    color: #666; background: #1a1a18;
-    transition: all 0.15s;
-}
-.portfolio-link:hover { background: #1f2d1f; color: #4ade80; border-color: #2d4a2d; }
+    /* ── Portfolio banner ── */
+    .portfolio-banner {
+        background: #fffdf0;
+        border: 1px solid #f0e68c;
+        border-left: 4px solid #c8f55a;
+        border-radius: 8px;
+        padding: 0.75rem 1.25rem;
+        margin-bottom: 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+    }
+    .portfolio-banner-text {
+        font-size: 0.85rem;
+        color: #444;
+        line-height: 1.5;
+    }
+    .portfolio-banner-text strong {
+        color: #111;
+        font-weight: 600;
+    }
+    .portfolio-links {
+        display: flex;
+        gap: 0.6rem;
+        white-space: nowrap;
+    }
+    .portfolio-link {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.7rem;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 5px;
+        text-decoration: none;
+        border: 1px solid #d4d0c8;
+        color: #333;
+        background: #fff;
+    }
+    .portfolio-link:hover { background: #111; color: #c8f55a; border-color: #111; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Top bar ───────────────────────────────────────────────────────────────────
+
+# ── Nav bar ───────────────────────────────────────────────────────────────────
 st.markdown("""
-<div class="topbar">
-    <div class="topbar-left">
-        <div class="topbar-indicator"></div>
-        <p class="topbar-title">Support Reply Copilot</p>
-        <span class="topbar-tag">Internal Tool</span>
+<div class="nav-bar">
+    <div class="nav-brand">
+        <span style="font-size:1.3rem">🤝</span>
+        <h1>Nonprofit Discount Assistant</h1>
+        <span class="nav-badge">AI-Powered</span>
     </div>
-    <div class="topbar-right">Support Ops · Decision Engine v1.0</div>
+    <div class="nav-meta">Support Ops · Internal Tool</div>
 </div>
 """, unsafe_allow_html=True)
+
 
 # ── Portfolio banner ─────────────────────────────────────────────────────────
 st.markdown("""
 <div class="portfolio-banner">
     <div class="portfolio-banner-text">
         👋 <strong>Hey, hiring team!</strong> This is a portfolio project by <strong>Sef Nouri</strong> —
-        a working AI tool that simulates how support teams can reduce escalations and improve reply quality
-        using LLM-based ticket analysis. It detects sentiment, classifies complexity, recommends deflect vs. escalate,
-        and drafts a suggested reply — all before the agent starts typing. Feel free to test it with a real ticket.
+        a working AI app that simulates how SaaS support teams could automate nonprofit discount request triage
+        using document verification and LLM-based eligibility classification. Feel free to test it with a real request.
     </div>
     <div class="portfolio-links">
-        <a class="portfolio-link" href="https://github.com/sefket24/support-reply-copilot" target="_blank">⌥ GitHub</a>
+        <a class="portfolio-link" href="https://github.com/sefket24/nonprofit-discount-assistant" target="_blank">⌥ GitHub</a>
         <a class="portfolio-link" href="https://www.linkedin.com/in/sefketnouri" target="_blank">in LinkedIn</a>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
+
 # ── Stats row ─────────────────────────────────────────────────────────────────
-total    = st.session_state.total_analyzed
-deflected = st.session_state.deflected_count
-defl_rate = f"{int(deflected/total*100)}%" if total > 0 else "—"
-elapsed_str = f"{st.session_state.last_elapsed:.1f}s" if st.session_state.last_elapsed else "—"
+total    = st.session_state.total_requests
+eligible = st.session_state.eligible_count
+rate     = f"{int(eligible/total*100)}%" if total > 0 else "—"
+proc_t   = f"{st.session_state.last_process_time:.1f}s" if st.session_state.last_process_time else "—"
 
 st.markdown(f"""
 <div class="stats-row">
     <div class="stat-card">
-        <div class="stat-label">Tickets Analyzed</div>
+        <div class="stat-label">Requests Processed</div>
         <div class="stat-value">{total}</div>
         <div class="stat-sub">this session</div>
     </div>
     <div class="stat-card">
-        <div class="stat-label">Deflection Rate</div>
-        <div class="stat-value">{defl_rate}</div>
-        <div class="stat-sub">resolved without escalation</div>
+        <div class="stat-label">Approval Rate</div>
+        <div class="stat-value">{rate}</div>
+        <div class="stat-sub">eligible classifications</div>
     </div>
     <div class="stat-card">
-        <div class="stat-label">Last Analysis</div>
-        <div class="stat-value">{elapsed_str}</div>
-        <div class="stat-sub">processing time</div>
+        <div class="stat-label">Avg Process Time</div>
+        <div class="stat-value">{proc_t}</div>
+        <div class="stat-sub">last request</div>
     </div>
     <div class="stat-card">
-        <div class="stat-label">Model</div>
-        <div class="stat-value" style="font-size:0.9rem;padding-top:0.3rem">Claude<br>Sonnet</div>
-        <div class="stat-sub">via Anthropic API</div>
+        <div class="stat-label">AI Models</div>
+        <div class="stat-value" style="font-size:0.95rem;padding-top:0.2rem">GPT-4o<br>GPT-4o-mini</div>
+        <div class="stat-sub">vision + analysis</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ── Layout ────────────────────────────────────────────────────────────────────
-left_col, right_col = st.columns([1, 1], gap="large")
 
-CATEGORIES = [
-    "Auto-detect",
-    "How-to / Feature question",
-    "Bug report",
-    "Billing / Subscription",
-    "Account access",
-    "Data / Export",
-    "Performance / Outage",
-    "Cancellation request",
-    "Unclear / Other",
-]
+# ── Helpers ───────────────────────────────────────────────────────────────────
+def encode_file(uploaded_file):
+    raw = uploaded_file.read()
+    return base64.b64encode(raw).decode("utf-8"), uploaded_file.type or "application/octet-stream"
 
-with left_col:
-    st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.markdown('<div class="panel-header">Incoming ticket</div>', unsafe_allow_html=True)
 
-    category = st.selectbox("Issue category", CATEGORIES)
-    message = st.text_area(
-        "Customer message",
-        placeholder="Paste the customer message here...",
-        height=220,
+def verify_document(client, b64, mime):
+    if mime == "application/pdf":
+        content = [
+            {"type": "text", "text": (
+                "This document was uploaded as proof of nonprofit status. "
+                "Does it appear to be a legitimate nonprofit verification document "
+                "(e.g. IRS 501c3 determination letter, EIN letter, charity registration)? "
+                "Reply ONLY with JSON: {\"verified\": true/false, \"doc_summary\": \"one sentence\"}"
+            )},
+            {"type": "document", "source": {"type": "base64", "media_type": mime, "data": b64}}
+        ]
+    else:
+        content = [
+            {"type": "text", "text": (
+                "This image was uploaded as proof of nonprofit status. "
+                "Does it appear to be a legitimate nonprofit verification document "
+                "(e.g. IRS 501c3 determination letter, EIN letter, charity registration)? "
+                "Reply ONLY with JSON: {\"verified\": true/false, \"doc_summary\": \"one sentence\"}"
+            )},
+            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}
+        ]
+
+    resp = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": content}],
+        max_tokens=200, temperature=0,
     )
+    raw = resp.choices[0].message.content.strip()
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"): raw = raw[4:]
+    return json.loads(raw.strip())
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    submit = st.button("⚡ Analyze ticket")
-    st.markdown('</div>', unsafe_allow_html=True)
 
-# ── Analysis ──────────────────────────────────────────────────────────────────
-def analyze_ticket(message: str, category: str) -> dict:
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+def analyze_request(org_name, email, message, has_proof, doc_verified=False, doc_summary=""):
+    api_key = os.getenv("OPENAI_API_KEY", "")
     if not api_key:
-        st.error("ANTHROPIC_API_KEY not found.")
+        st.error("⚠️  OPENAI_API_KEY not found.")
         st.stop()
 
-    client = Anthropic(api_key=api_key)
+    client = OpenAI(api_key=api_key)
 
-    cat_context = f" (Agent-tagged category: {category})" if category != "Auto-detect" else ""
+    doc_context = ""
+    if doc_summary:
+        status = "VERIFIED" if doc_verified else "UNVERIFIED"
+        doc_context = f"\nDocument: {doc_summary} [{status}]"
 
-    prompt = f"""You are a senior support engineer helping triage incoming support tickets. Analyze the ticket below and return ONLY valid JSON — no markdown fences, no preamble.
+    prompt = f"""You are a SaaS support agent reviewing a nonprofit discount request.
 
-Ticket{cat_context}:
-\"\"\"
-{message}
-\"\"\"
+Organization: {org_name}
+Email: {email}
+Proof checkbox: {has_proof}{doc_context}
 
-Return exactly this JSON structure:
+Message:
+\"\"\"{message}\"\"\"
+
+Return ONLY a valid JSON object with these exact fields:
 {{
-  "sentiment": "neutral" | "frustrated" | "urgent",
-  "complexity": "simple" | "moderate" | "complex",
-  "request_type": "how-to" | "bug" | "billing" | "account" | "data" | "performance" | "cancellation" | "unclear",
-  "deflection_decision": "deflect" | "human",
-  "deflection_reason": "one sentence explaining why this can or cannot be deflected",
-  "escalation_flags": ["flag1", "flag2"],
+  "classification": "eligible" | "needs_more_info" | "not_eligible",
   "confidence": <integer 0-100>,
-  "suggested_reply": "A clear, warm, professional reply a support agent would be proud to send. Avoid corporate speak. Be specific and actionable. 3–5 sentences.",
-  "internal_note": "One sentence note for the agent — anything worth flagging that the customer won't see.",
+  "reasoning": "2-3 sentence explanation",
+  "tone": "brief tone description",
+  "risk_flags": ["flag1", "flag2"],
+  "suggested_response": "warm professional reply 3-5 sentences",
   "tags": ["tag1", "tag2", "tag3"]
 }}
 
 Rules:
-- deflection_decision "deflect" = can be resolved with a single clear answer or link, no back-and-forth needed
-- deflection_decision "human" = needs investigation, account access, judgment, or multiple exchanges
-- escalation_flags: list only real concerns. Examples: "user is threatening cancellation", "possible data loss", "describes billing error over $100", "mentions regulatory concern", "sentiment indicates churn risk". Empty list [] if none.
-- confidence: your certainty in the deflection decision (not in the reply quality)
-- suggested_reply: write as the agent, not as an AI. No "As an AI..." language. No hollow apologies. Get to the point.
-- tags: short lowercase descriptors for ticket routing/tagging
+- classification eligible: doc verified AND clear nonprofit mission
+- classification needs_more_info: missing doc, unverified doc, or unclear mission
+- classification not_eligible: commercial/for-profit signals
+- confidence: your certainty in the classification (0=very unsure, 100=certain)
+- risk_flags: list 0-3 specific concerns (e.g. "domain mismatch", "vague mission", "no EIN mentioned", "commercial language detected"). Empty list [] if none.
 """
 
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1000,
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
+        temperature=0.3,
     )
 
-    raw = response.content[0].text.strip()
+    raw = response.choices[0].message.content.strip()
     if raw.startswith("```"):
         raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
+        if raw.startswith("json"): raw = raw[4:]
     return json.loads(raw.strip())
 
 
-# ── Output panel ──────────────────────────────────────────────────────────────
+# ── Layout ────────────────────────────────────────────────────────────────────
+left_col, right_col = st.columns([1, 1], gap="large")
+
+with left_col:
+    st.markdown('<div class="form-card">', unsafe_allow_html=True)
+    st.markdown("#### 📋 Discount Request Form")
+    st.markdown("---")
+
+    org_name = st.text_input("Organization Name", placeholder="e.g. Green Earth Foundation")
+    email    = st.text_input("Contact Email", placeholder="e.g. hello@greenearth.org")
+    message  = st.text_area(
+        "Request Message",
+        placeholder="Describe your organization's mission and why you're requesting a nonprofit discount...",
+        height=150,
+    )
+
+    st.markdown("**Proof of Nonprofit Status**")
+    st.caption("Upload your 501(c)(3) letter, EIN document, or equivalent. Accepts PDF, PNG, JPG.")
+    uploaded_doc = st.file_uploader(
+        "Upload document",
+        type=["pdf", "png", "jpg", "jpeg"],
+        label_visibility="collapsed",
+    )
+
+    has_proof = st.checkbox("✅ I confirm this document is authentic and belongs to our organization")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    submit = st.button("🔍 Analyze Eligibility")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
 with right_col:
-    st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.markdown('<div class="panel-header">Analysis output</div>', unsafe_allow_html=True)
+    st.markdown('<div class="result-card">', unsafe_allow_html=True)
+    st.markdown("#### 📊 Eligibility Analysis")
+    st.markdown("---")
 
     if not submit:
         st.markdown("""
-        <div class="placeholder">
-            Paste a ticket and click Analyze.<br>
-            The copilot will handle the rest.
+        <div class="result-placeholder">
+            Submit a request to see<br>the AI analysis here.
         </div>
         """, unsafe_allow_html=True)
 
     else:
-        if not message.strip():
-            st.warning("Please paste a customer message.")
+        if not org_name.strip() or not message.strip():
+            st.warning("Please fill in Organization Name and Request Message.")
         else:
-            t_start = time.time()
+            api_key = os.getenv("OPENAI_API_KEY", "")
+            if not api_key:
+                st.error("⚠️  OPENAI_API_KEY not found.")
+                st.stop()
 
-            with st.spinner("Analyzing..."):
+            client   = OpenAI(api_key=api_key)
+            t_start  = time.time()
+            doc_verified = False
+            doc_summary  = ""
+
+            # ── Step indicators ──
+            has_doc = uploaded_doc is not None
+            step1_class = "step-active" if has_doc else "step-pending"
+            st.markdown(f"""
+            <div class="step-row">
+                <div class="step {step1_class}">① Doc Verify</div>
+                <div class="step step-active">② AI Analysis</div>
+                <div class="step step-pending">③ Complete</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # ── Step 1: document verification ──
+            if has_doc:
+                with st.spinner("🔎 Verifying document with GPT-4o vision..."):
+                    try:
+                        b64, mime   = encode_file(uploaded_doc)
+                        doc_result  = verify_document(client, b64, mime)
+                        doc_verified = doc_result.get("verified", False)
+                        doc_summary  = doc_result.get("doc_summary", "Document uploaded")
+                    except Exception as e:
+                        st.warning(f"Document verification failed: {e}")
+
+                if doc_verified:
+                    st.markdown(f'<div class="doc-verified">✅ Verified — {doc_summary}</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div class="doc-unverified">⚠️ Not verified — {doc_summary}</div>', unsafe_allow_html=True)
+
+            # ── Step 2: analyze ──
+            with st.spinner("🤖 Analyzing eligibility..."):
                 try:
-                    result = analyze_ticket(message.strip(), category)
+                    result = analyze_request(org_name, email, message, has_proof, doc_verified, doc_summary)
                 except json.JSONDecodeError:
-                    st.error("Unexpected response format. Try again.")
+                    st.error("Unexpected AI response format. Please try again.")
                     st.stop()
                 except Exception as e:
                     st.error(f"API error: {e}")
                     st.stop()
 
-            elapsed = time.time() - t_start
-            st.session_state.total_analyzed += 1
-            st.session_state.last_elapsed = elapsed
-            if result.get("deflection_decision") == "deflect":
-                st.session_state.deflected_count += 1
+            t_elapsed = time.time() - t_start
+            st.session_state.total_requests += 1
+            st.session_state.last_process_time = t_elapsed
+            if result.get("classification") == "eligible":
+                st.session_state.eligible_count += 1
 
-            # ── Sentiment / complexity / type row ──
-            sentiment = result.get("sentiment", "neutral")
-            complexity = result.get("complexity", "simple")
-            req_type = result.get("request_type", "unclear")
-
-            sent_badge = {
-                "neutral":    ("badge-gray",   "● Neutral"),
-                "frustrated": ("badge-yellow", "▲ Frustrated"),
-                "urgent":     ("badge-red",    "■ Urgent"),
-            }.get(sentiment, ("badge-gray", sentiment.title()))
-
-            type_badge = {
-                "how-to":       ("badge-blue",   "How-to"),
-                "bug":          ("badge-red",    "Bug"),
-                "billing":      ("badge-yellow", "Billing"),
-                "account":      ("badge-blue",   "Account"),
-                "data":         ("badge-blue",   "Data"),
-                "performance":  ("badge-red",    "Performance"),
-                "cancellation": ("badge-yellow", "Cancellation"),
-                "unclear":      ("badge-gray",   "Unclear"),
-            }.get(req_type, ("badge-gray", req_type.title()))
-
-            # Complexity dots
-            dots_map = {
-                "simple":   [True, False, False],
-                "moderate": [True, True, False],
-                "complex":  [True, True, True],
-            }
-            dot_colors = ["c-dot-on-simple", "c-dot-on-mod", "c-dot-on-complex"]
-            dots_state = dots_map.get(complexity, [False, False, False])
-            dots_html = "".join(
-                f'<div class="c-dot {dot_colors[i] if dots_state[i] else "c-dot-off"}"></div>'
-                for i in range(3)
-            )
-
+            # ── Step 3 complete — re-render steps ──
+            step1_done = "step-done" if has_doc else "step-pending"
+            doc_ok     = "step-done" if doc_verified else ("step-error" if has_doc else "step-pending")
             st.markdown(f"""
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
-                <span class="badge {sent_badge[0]}">{sent_badge[1]}</span>
-                <span class="badge {type_badge[0]}">{type_badge[1]}</span>
-                <div style="display:flex;align-items:center;gap:6px;margin-left:4px">
-                    <span style="font-family:'DM Mono',monospace;font-size:0.6rem;color:#555;text-transform:uppercase;letter-spacing:1px">Complexity</span>
-                    <div class="complexity-row">{dots_html}</div>
-                    <span style="font-family:'DM Mono',monospace;font-size:0.68rem;color:#666">{complexity.title()}</span>
-                </div>
+            <div class="step-row">
+                <div class="step {doc_ok}">① Doc Verify</div>
+                <div class="step step-done">② AI Analysis</div>
+                <div class="step step-done">③ Complete</div>
             </div>
             """, unsafe_allow_html=True)
 
-            # ── Deflection decision ──
-            defl = result.get("deflection_decision", "human")
-            defl_reason = result.get("deflection_reason", "")
-            if defl == "deflect":
-                defl_label = "✓ Deflect with guidance"
-                defl_cls = "deflect"
+            # ── Classification + confidence ──
+            classification = result.get("classification", "needs_more_info")
+            confidence     = result.get("confidence", 50)
+
+            if classification == "eligible":
+                badge = '<span class="status-eligible">✅ Eligible</span>'
+            elif classification == "not_eligible":
+                badge = '<span class="status-not-eligible">❌ Not Eligible</span>'
             else:
-                defl_label = "→ Requires human handling"
-                defl_cls = "human"
+                badge = '<span class="status-needs-review">⚠️ Needs Review</span>'
 
-            st.markdown('<div class="section-label">Deflection decision</div>', unsafe_allow_html=True)
-            st.markdown(f"""
-            <div class="deflection-box {defl_cls}">
-                <strong style="font-family:'DM Mono',monospace;font-size:0.78rem">{defl_label}</strong><br>
-                <span style="font-size:0.82rem;opacity:0.85">{defl_reason}</span>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(badge, unsafe_allow_html=True)
 
-            # ── Confidence ──
-            confidence = result.get("confidence", 50)
-            conf_cls = "conf-high" if confidence >= 75 else ("conf-medium" if confidence >= 45 else "conf-low")
+            # Confidence bar
+            conf_class = "conf-high" if confidence >= 75 else ("conf-medium" if confidence >= 45 else "conf-low")
             st.markdown(f"""
-            <div style="margin-top:0.9rem">
-                <div class="section-label">Decision confidence</div>
-                <div class="conf-track">
-                    <div class="conf-fill {conf_cls}" style="width:{confidence}%"></div>
+            <div class="confidence-wrap">
+                <div class="confidence-label">AI Confidence</div>
+                <div class="confidence-track">
+                    <div class="confidence-fill {conf_class}" style="width:{confidence}%"></div>
                 </div>
-                <div class="conf-pct">{confidence}%</div>
+                <div class="confidence-pct">{confidence}%</div>
             </div>
             """, unsafe_allow_html=True)
 
-            # ── Escalation flags ──
-            flags = result.get("escalation_flags", [])
-            if flags:
-                st.markdown('<div class="section-label">Escalation flags</div>', unsafe_allow_html=True)
-                flags_html = " ".join(f'<span class="flag-item">⚑ {f}</span>' for f in flags)
+            # ── Risk flags ──
+            risk_flags = result.get("risk_flags", [])
+            if risk_flags:
+                st.markdown('<div class="section-label">⚑ Risk Flags</div>', unsafe_allow_html=True)
+                flags_html = " ".join(f'<span class="risk-flag">⚠ {f}</span>' for f in risk_flags)
                 st.markdown(flags_html, unsafe_allow_html=True)
 
-            st.markdown('<hr class="divider">', unsafe_allow_html=True)
+            # ── Reasoning ──
+            st.markdown('<div class="section-label">Reasoning</div>', unsafe_allow_html=True)
+            st.markdown(f"<p style='font-size:0.88rem;color:#333;line-height:1.65;margin:0'>{result.get('reasoning','')}</p>", unsafe_allow_html=True)
 
-            # ── Suggested reply ──
-            st.markdown('<div class="section-label">Suggested reply</div>', unsafe_allow_html=True)
-            suggested = result.get("suggested_reply", "")
-            st.markdown(f'<div class="reply-box">{suggested}</div>', unsafe_allow_html=True)
-            st.code(suggested, language=None)
+            # ── Tone ──
+            st.markdown('<div class="section-label">Request Tone</div>', unsafe_allow_html=True)
+            st.markdown(f"<p style='font-size:0.88rem;color:#666;font-style:italic;margin:0'>{result.get('tone','')}</p>", unsafe_allow_html=True)
 
-            # ── Internal note ──
-            internal_note = result.get("internal_note", "")
-            if internal_note:
-                st.markdown('<div class="section-label">Internal note (agent only)</div>', unsafe_allow_html=True)
-                st.markdown(f"""
-                <div style="background:#1c1c1a;border:1px solid #2a2a28;border-radius:6px;padding:0.7rem 1rem;font-size:0.82rem;color:#666;font-style:italic;line-height:1.6">
-                    {internal_note}
-                </div>
-                """, unsafe_allow_html=True)
+            # ── Suggested response + copy button ──
+            st.markdown('<div class="section-label">Suggested Response</div>', unsafe_allow_html=True)
+            suggested = result.get("suggested_response", "")
+            st.markdown(f'<div class="response-box">{suggested}</div>', unsafe_allow_html=True)
+            st.code(suggested, language=None)  # gives a native copy button
 
             # ── Tags ──
             tags = result.get("tags", [])
             if tags:
                 st.markdown('<div class="section-label">Tags</div>', unsafe_allow_html=True)
-                st.markdown(" ".join(f'<span class="tag-item">{t}</span>' for t in tags), unsafe_allow_html=True)
+                st.markdown(" ".join(f'<span class="tag">{t}</span>' for t in tags), unsafe_allow_html=True)
 
-            st.markdown(f'<div class="elapsed">⏱ {elapsed:.1f}s</div>', unsafe_allow_html=True)
+            # ── Process time ──
+            st.markdown(f'<div class="process-time">⏱ Processed in {t_elapsed:.1f}s</div>', unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.markdown("<br>", unsafe_allow_html=True)
 st.markdown(
-    "<p style='text-align:center;font-family:DM Mono,monospace;font-size:0.65rem;color:#333'>"
-    "Support Reply Copilot · Streamlit + Anthropic Claude · Internal Decision Engine"
+    "<p style='text-align:center;font-size:0.72rem;color:#bbb;font-family:IBM Plex Mono,monospace'>"
+    "AI Nonprofit Discount Assistant · Streamlit + OpenAI GPT-4o · Internal Support Tool"
     "</p>",
     unsafe_allow_html=True,
 )
