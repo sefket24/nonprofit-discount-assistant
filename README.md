@@ -2,6 +2,11 @@
 
 > AI-powered eligibility screening for SaaS support teams — built with Python, Streamlit, and OpenAI.
 
+## Live Demo
+
+Try the working prototype here:
+https://nonprofit-discount-assistant.streamlit.app/
+
 ---
 
 ## Overview
